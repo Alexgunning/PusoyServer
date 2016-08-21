@@ -4,6 +4,7 @@ from flask import Flask, jsonify
 from flask import request
 from flask import make_response
 from flask import abort
+from flask import g
 import json
 import random
 import sqlite3
@@ -14,6 +15,24 @@ from time import gmtime, strftime
 #db = MySQLdb.connect("localhost","root","KopitarTrout27","
 #db = sqlite3.connect('pusoyDB')
 #cur = db.cursor()
+
+DATABASE = '/var/www/FlaskApp/FlaskApp/pusoyDB'
+
+app = Flask(__name__)
+
+def get_db():
+    #db = getattr(g, '_database', None)
+    db = None
+    if db is None:
+        db = g._database = sqlite3.connect(DATABASE)
+    return db
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()
+
 
 def findPlayerNum(gameID,playerID):
 	queryStr = "SELECT player0,player1,player2 FROM allGames WHERE gameID = '%s'"%gameID
@@ -58,10 +77,9 @@ def findStartingPlayer(playerArray):
 		lowCardIt = lowCardIt + 1
 		playerIt = 0
 
-def CreateGame():
-        db = sqlite3.connect('pusoyDB')
-        cur = db.cursor()   
-	print("Create Game")
+def CreateGame(db, cur):
+	#db = get_db()
+	#cur = db.cursor()	
 	p0Const = 0
 	p1Const = -1
 	p2Const = -2
@@ -85,8 +103,6 @@ def CreateGame():
 	cur.execute(queryStr)
 	db.commit()
 
-CreateGame()
-	
 def findPlayerGameID(ID):
 	queryString = "SELECT gameID FROM allGames where (player0=%d || player1=%d || player2=%d) && gameFinished=FALSE"%(ID,ID,ID)
 	if(cur.execute(queryString)):
@@ -96,7 +112,7 @@ def findPlayerGameID(ID):
 		return "fail"
 
 def getPlayer(gameName,playerID):
-	db = sqlite3.connect('pusoyDB')
+	db = get_db()
         cur = db.cursor()
 	queryString = "SELECT hand FROM %s WHERE id = %s"%(gameName,playerID)
 	print(queryString)
@@ -106,9 +122,9 @@ def getPlayer(gameName,playerID):
 	db.close()
 	return eval(queryResult[0][0])
 
-def joinRandomGameHelper(id,playerID,gameName):
-	    db = sqlite3.connect('pusoyDB')
-	    cur = db.cursor()    
+def joinRandomGameHelper(id,playerID,gameName, db, cur):
+	    #db = get_db() 
+	    #cur = db.cursor()    
             updateTableStr = "UPDATE allGames SET player%d=%d WHERE gameID ='%s'" %(id,playerID,gameName)
   	    print(updateTableStr)
             cur.execute(updateTableStr)
@@ -116,12 +132,12 @@ def joinRandomGameHelper(id,playerID,gameName):
             updateTableStr = "UPDATE %s SET id=%d WHERE id=%d"%(gameName,playerID,-id)
 	    cur.execute(updateTableStr)
             db.commit()
-	    db.close()
+	    #db.close()
 
 app = Flask(__name__)
 @app.route('/joinRandomGame/<int:playerID>')
 def joinRandomGame(playerID):
-	db = sqlite3.connect('pusoyDB')
+	db = get_db() 
         cur = db.cursor()   
 #	cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
 #	print(cur.fetchall())
@@ -129,29 +145,31 @@ def joinRandomGame(playerID):
 	playerStatus = cur.fetchall()
 	gameName = playerStatus[0][3]
 	playerNum = -1
-	db.close()
+	#db.close()
 	if playerStatus[0][0] is None:
-        	joinRandomGameHelper(0,playerID,gameName)
+        	joinRandomGameHelper(0,playerID,gameName, db, cur)
 		playerNum = 0
 	elif playerStatus[0][1] is None:
-		joinRandomGameHelper(1,playerID,gameName)
+		joinRandomGameHelper(1,playerID,gameName, db, cur)
 		playerNum = 1
 	elif playerStatus[0][2] is None:
-		joinRandomGameHelper(2,playerID,gameName)
+		joinRandomGameHelper(2,playerID,gameName, db, cur)
 		playerNum = 2
 		db = sqlite3.connect('pusoyDB')
        		cur = db.cursor()
 		queryStr = "UPDATE gameStatus SET gameFull='1' where gameID='%s'"%gameName 
 		print(queryStr)
 		cur.execute(queryStr)
-		db.close()
-		CreateGame()
+		#db.close()
+		CreateGame(db, cur)
 	hand = getPlayer(gameName,playerID)
 	
 	return jsonify(game=gameName,hand=hand,playerNum=playerNum,cardCount=len(hand))
 
 @app.route('/checkGameStatus/<string:gameID>')
 def gameStatus(gameID):
+	db = get_db()
+	cur = db.cursor()
 	searchQuery = "SELECT curPlayer,lastPlayedHand,gameFull FROM gameStatus WHERE gameID = '%s'"%gameID
 	cur.execute(searchQuery)
 	curPlayerStatus = cur.fetchall()
@@ -188,6 +206,8 @@ def login():
 def newPlayer():
 	if not request.json or not 'email' in request.json or not 'password' in request.json:
        		return "Bad Params"
+	db = get_db()
+	cur = db.cursor() 
 	email = request.json['email']
 	password = request.json['password']	
 	queryStr = "SELECT * from players where email = '%s'"%email
