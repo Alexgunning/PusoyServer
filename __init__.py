@@ -6,13 +6,14 @@ from flask import make_response
 from flask import abort
 import json
 import random
+import sqlite3
 from time import gmtime, strftime
 
 #timeStr = strftime("%H%M%S", gmtime())
 
-db = MySQLdb.connect("localhost","root","KopitarTrout27","ALEX")
-db.autocommit = 1
-cur = db.cursor()
+#db = MySQLdb.connect("localhost","root","KopitarTrout27","
+#db = sqlite3.connect('pusoyDB')
+#cur = db.cursor()
 
 def findPlayerNum(gameID,playerID):
 	queryStr = "SELECT player0,player1,player2 FROM allGames WHERE gameID = '%s'"%gameID
@@ -58,6 +59,9 @@ def findStartingPlayer(playerArray):
 		playerIt = 0
 
 def CreateGame():
+        db = sqlite3.connect('pusoyDB')
+        cur = db.cursor()   
+	print("Create Game")
 	p0Const = 0
 	p1Const = -1
 	p2Const = -2
@@ -65,7 +69,7 @@ def CreateGame():
 	players = initHands(timeStr)
 	rank52altSorted = rank52alt()
 	startingData = findStartingPlayer(players)	
-	gameStatusTableStr = "INSERT INTO gameStatus (gameID,curplayer,lastPlayedHand,gameFull) VALUES ('game%s','%d','[100]','0')"%(timeStr,startingData[0])
+	gameStatusTableStr = "INSERT INTO gameStatus (gameID,curPlayer,lastPlayedHand,gameFull) VALUES ('game%s','%d','[100]','0')"%(timeStr,startingData[0])
 	cur.execute(gameStatusTableStr)
 	createTableStr = "CREATE TABLE game%s (id INT, cardCount INT, hand VARCHAR(60))"%timeStr
 	cur.execute(createTableStr)
@@ -76,10 +80,13 @@ def CreateGame():
 	cur.execute(p1InsertStr)
 	cur.execute(p2InsertStr)
 	gameStr = "game" + timeStr
-	queryStr = "INSERT INTO allGames (gameID,player0,player1,player2,gameFinished) VALUES('%s',null,null,null,FALSE)"%gameStr
+	queryStr = "INSERT INTO allGames (gameID,player0,player1,player2,gameFinished) VALUES('%s',null,null,null,0)"%gameStr
+	print(queryStr)
 	cur.execute(queryStr)
 	db.commit()
 
+CreateGame()
+	
 def findPlayerGameID(ID):
 	queryString = "SELECT gameID FROM allGames where (player0=%d || player1=%d || player2=%d) && gameFinished=FALSE"%(ID,ID,ID)
 	if(cur.execute(queryString)):
@@ -89,31 +96,40 @@ def findPlayerGameID(ID):
 		return "fail"
 
 def getPlayer(gameName,playerID):
+	db = sqlite3.connect('pusoyDB')
+        cur = db.cursor()
 	queryString = "SELECT hand FROM %s WHERE id = %s"%(gameName,playerID)
 	print(queryString)
 	cur.execute(queryString)
 	queryResult = cur.fetchall()
 	print(queryResult)
+	db.close()
 	return eval(queryResult[0][0])
 
 def joinRandomGameHelper(id,playerID,gameName):
-                updateTableStr = "UPDATE allGames SET player%d=%d WHERE gameID ='%s'" %(id,playerID,gameName)
-  		print(updateTableStr)
-                cur.execute(updateTableStr)
-                db.commit()
-		updateTableStr = "UPDATE %s SET id=%d WHERE id=%d"%(gameName,playerID,-id)
-		print(updateTableStr)
-		cur.execute(updateTableStr)
-                db.commit()
-
+	    db = sqlite3.connect('pusoyDB')
+	    cur = db.cursor()    
+            updateTableStr = "UPDATE allGames SET player%d=%d WHERE gameID ='%s'" %(id,playerID,gameName)
+  	    print(updateTableStr)
+            cur.execute(updateTableStr)
+            db.commit()
+            updateTableStr = "UPDATE %s SET id=%d WHERE id=%d"%(gameName,playerID,-id)
+	    cur.execute(updateTableStr)
+            db.commit()
+	    db.close()
 
 app = Flask(__name__)
 @app.route('/joinRandomGame/<int:playerID>')
 def joinRandomGame(playerID):
+	db = sqlite3.connect('pusoyDB')
+        cur = db.cursor()   
+#	cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+#	print(cur.fetchall())
 	cur.execute("SELECT player0,player1,player2,gameID FROM allGames ORDER BY gameID DESC LIMIT 1")
 	playerStatus = cur.fetchall()
 	gameName = playerStatus[0][3]
 	playerNum = -1
+	db.close()
 	if playerStatus[0][0] is None:
         	joinRandomGameHelper(0,playerID,gameName)
 		playerNum = 0
@@ -123,16 +139,19 @@ def joinRandomGame(playerID):
 	elif playerStatus[0][2] is None:
 		joinRandomGameHelper(2,playerID,gameName)
 		playerNum = 2
+		db = sqlite3.connect('pusoyDB')
+       		cur = db.cursor()
 		queryStr = "UPDATE gameStatus SET gameFull='1' where gameID='%s'"%gameName 
 		print(queryStr)
 		cur.execute(queryStr)
+		db.close()
 		CreateGame()
 	hand = getPlayer(gameName,playerID)
 	
 	return jsonify(game=gameName,hand=hand,playerNum=playerNum,cardCount=len(hand))
 
-@app.route('/checkGameStatus/<int:gameID>')
-def gameStatus(playerID):
+@app.route('/checkGameStatus/<string:gameID>')
+def gameStatus(gameID):
 	searchQuery = "SELECT curPlayer,lastPlayedHand,gameFull FROM gameStatus WHERE gameID = '%s'"%gameID
 	cur.execute(searchQuery)
 	curPlayerStatus = cur.fetchall()
@@ -233,7 +252,7 @@ def playPassHand():
         	playerID = request.json['playerID']
 		playerNum = findPlayerNum(gameID,playerID)
                 playerNum = (playerNum+1)%3
-		queryStr = "UPDATE gameStatus SET lastPlayedHand='[100]',curPlayer='%s' WHERE gameID = '%s'"%(playerNum,gameID)
+		queryStr = "UPDATE gameStatus SET lastPlayedHand=[100],curPlayer='%s' WHERE gameID = '%s'"%(playerNum,gameID)
         	cur.execute(queryStr)
 		db.commit() 
 		return "Hand Passed"		
@@ -246,4 +265,4 @@ if __name__ == '__main__':
 @app.route('/')
 def index():
     return "Hello, World!"
-	
+
