@@ -87,7 +87,7 @@ def CreateGame(db, cur):
 	players = initHands(timeStr)
 	rank52altSorted = rank52alt()
 	startingData = findStartingPlayer(players)	
-	gameStatusTableStr = "INSERT INTO gameStatus (gameID,curPlayer,lastPlayedHand,gameFull) VALUES ('game%s','%d','[100]','0')"%(timeStr,startingData[0])
+	gameStatusTableStr = "INSERT INTO gameStatus (gameID,curPlayer,lastPlayedHand,gameFull) VALUES ('game%s','%d','100,100','0')"%(timeStr,startingData[0])
 	cur.execute(gameStatusTableStr)
 	createTableStr = "CREATE TABLE game%s (id INT, cardCount INT, hand VARCHAR(60))"%timeStr
 	cur.execute(createTableStr)
@@ -102,7 +102,13 @@ def CreateGame(db, cur):
 	print(queryStr)
 	cur.execute(queryStr)
 	db.commit()
+def CreateGameOutside():
+	db  = sqlite3.connect(DATABASE)
+        cur = db.cursor()
+	CreateGame(db, cur)
 
+CreateGameOutside()
+	
 def findPlayerGameID(ID):
 	queryString = "SELECT gameID FROM allGames where (player0=%d || player1=%d || player2=%d) && gameFinished=FALSE"%(ID,ID,ID)
 	if(cur.execute(queryString)):
@@ -163,7 +169,8 @@ def joinRandomGame(playerID):
 		#db.close()
 		CreateGame(db, cur)
 	hand = getPlayer(gameName,playerID)
-	
+	print(hand)
+	print(type(hand))	
 	return jsonify(game=gameName,hand=hand,playerNum=playerNum,cardCount=len(hand))
 
 @app.route('/checkGameStatus/<string:gameID>')
@@ -173,7 +180,19 @@ def gameStatus(gameID):
 	searchQuery = "SELECT curPlayer,lastPlayedHand,gameFull FROM gameStatus WHERE gameID = '%s'"%gameID
 	cur.execute(searchQuery)
 	curPlayerStatus = cur.fetchall()
-	return jsonify(curPlayer=curPlayerStatus[0][0],lastPlayedHand=curPlayerStatus[0][1],gameFull=curPlayerStatus[0][2])
+	curPlayerArray = curPlayerStatus[0][1]
+	print("cur player array")
+	print(curPlayerArray)
+	curplayerArray = curPlayerArray.split
+	print("cur player array split")
+	print(curPlayerArray)
+	#curPlayerArray = curPlayerArray.split(',')
+	#print(curPlayerArray)
+	print(type(curPlayerArray))
+	curPlayerArray= int(curPlayerArray)
+	print("cur player array new")
+	print(type(curPlayerArray))
+	return jsonify(curPlayer=curPlayerStatus[0][0],lastPlayedHand=curPlayerArray,gameFull=curPlayerStatus[0][2])
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -184,7 +203,7 @@ def login():
     password = request.json['password']
     password.encode('ascii','ignore')
     str(email)
-    queryStr = "SELECT password from players where email = '%s'"%email
+    queryStr = "SELECT password FROM players WHERE email = '%s'"%email
     isValidEmail = cur.execute(queryStr)
     if isValidEmail == 0:
     	return (jsonify(id=-2))
@@ -194,7 +213,7 @@ def login():
     if password != passwordSQL:
     	return (jsonify(id=-1))
     else:
-	queryStr = "SELECT id from players where email = '%s'"%email
+	queryStr = "SELECT id FROM players WHERE email = '%s'"%email
         cur.execute(queryStr)
         idArray = cur.fetchall()
         id = idArray[0][0]
@@ -210,13 +229,13 @@ def newPlayer():
 	cur = db.cursor() 
 	email = request.json['email']
 	password = request.json['password']	
-	queryStr = "SELECT * from players where email = '%s'"%email
+	queryStr = "SELECT * FROM players WHERE email = '%s'"%email
 	emailExists = cur.execute(queryStr)
 	if emailExists != 0:
 		return (jsonify(id=-1))
 	queryStr = "INSERT INTO players (email, password) VALUES ('%s','%s')"%(email,password)
 	cur.execute(queryStr)
-	queryStr = "SELECT id from players where email = '%s'"%email
+	queryStr = "SELECT id FROM players WHERE email = '%s'"%email
 	cur.execute(queryStr)
 	idArray = cur.fetchall()
 	id = idArray[0][0]
@@ -272,17 +291,16 @@ def playPassHand():
         	playerID = request.json['playerID']
 		playerNum = findPlayerNum(gameID,playerID)
                 playerNum = (playerNum+1)%3
-		queryStr = "UPDATE gameStatus SET lastPlayedHand=[100],curPlayer='%s' WHERE gameID = '%s'"%(playerNum,gameID)
+		queryStr = "UPDATE gameStatus SET lastPlayedHand=100,100,curPlayer='%s' WHERE gameID = '%s'"%(playerNum,gameID)
         	cur.execute(queryStr)
 		db.commit() 
 		return "Hand Passed"		
 	
 
 if __name__ == '__main__':
-    app.run(debug = True)
+    app.run(host = '192.168.0.110')
 
 
 @app.route('/')
 def index():
     return "Hello, World!"
-
