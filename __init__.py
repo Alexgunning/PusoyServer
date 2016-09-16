@@ -7,10 +7,16 @@ from flask import g
 import json
 import random
 import sqlite3
+import logging
+import sys
 from time import gmtime, strftime
 
-#timeStr = strftime("%H%M%S", gmtime())
+f=open('ipAddress','r')
+ipAddress = f.readline()
+ipAddress = ipAddress.rstrip()
+print(ipAddress) 
 
+#timeStr = strftime("%H%M%S", gmtime()) 
 #db = MySQLdb.connect("localhost","root","KopitarTrout27","
 #db = sqlite3.connect('pusoyDB')
 #cur = db.cursor()
@@ -34,9 +40,11 @@ def close_connection(exception):
 
 
 def findPlayerNum(gameID,playerID, db, cur):
-	queryStr = "SELECT player0,player1,player2 FROM allGames WHERE gameID = '%s'"%gameID
+	queryStr = "SELECT player0,player1,player2 FROM masterGame WHERE gameID = '%s'"%gameID
 	cur.execute(queryStr)
 	playerDB = cur.fetchall()
+	print("PLAYER DB CALL RESULTS")
+	print(playerDB)
 	for i in range(3):
 		if int(playerDB[0][i]) == int(playerID):
 			return i
@@ -94,8 +102,7 @@ def CreateGame(db, cur):
 	players = initHands(timeStr)
 	rank52altSorted = rank52alt()
 	startingData = findStartingPlayer(players)	
-	gameStatusTableStr = "INSERT INTO gameStatus (gameID,curPlayer,gameFull,cardCount) VALUES ('game%s','%d','0','0')"%(timeStr,startingData[0])
-	cur.execute(gameStatusTableStr)
+	
 	createTableStr = "CREATE TABLE game%s (id INT, cardCount INT, Card0 INT, Card1 INT, Card2 INT, Card3 INT, Card4 INT, Card5 INT, Card6 INT, Card7 INT, Card8 INT, Card9 INT, Card10 INT, Card11 INT, Card12 INT )"%timeStr
 	cur.execute(createTableStr)
 	p0InsertStr = "INSERT INTO game%s (id,cardCount) VALUES ('%d','13')" %(timeStr,p0Const)
@@ -107,20 +114,21 @@ def CreateGame(db, cur):
 	updateTableWithStartingHand(p0Const, timeStr, players[0], db, cur)
 	updateTableWithStartingHand(p1Const, timeStr, players[1], db, cur)
 	updateTableWithStartingHand(p2Const, timeStr, players[2], db, cur)
-	gameStr = "game" + timeStr
-	queryStr = "INSERT INTO allGames (gameID,player0,player1,player2,gameFinished) VALUES('%s',null,null,null,0)"%gameStr
-	print(queryStr)
-	cur.execute(queryStr)
+	masterGameStr = "INSERT INTO masterGame (gameID, curPlayer, gameFull, gameFinished, cardCount) VALUES ('game%s','%d','0','0','0')"%(timeStr, startingData[1]) 
+	print(masterGameStr)
+	cur.execute(masterGameStr)
 	db.commit()
+
 def CreateGameOutside():
 	db  = sqlite3.connect(DATABASE)
         cur = db.cursor()
 	CreateGame(db, cur)
 
-##CreateGameOutside()
+
+#CreateGameOutside()
 	
 def findPlayerGameID(ID):
-	queryString = "SELECT gameID FROM allGames where (player0=%d || player1=%d || player2=%d) && gameFinished=FALSE"%(ID,ID,ID)
+	queryString = "SELECT gameID FROM masterGame where (player0=%d || player1=%d || player2=%d) && gameFinished=FALSE"%(ID,ID,ID)
 	if(cur.execute(queryString)):
 		fetchGet = cur.fetchall()
 		return fetchGet[0][0]
@@ -131,8 +139,11 @@ def getPlayer(gameName,playerID):
 	db = get_db()
         cur = db.cursor()
 	queryString = "SELECT cardCount FROM %s WHERE id = %s"%(gameName,playerID)
+	print(queryString)
 	cur.execute(queryString)
 	cardCount = cur.fetchall()
+	print("THIS IS THE CARD COUNT")
+	print(cardCount)
 	count = cardCount[0][0]
 	returnHand = []
 	queryStr = "SELECT "
@@ -153,8 +164,8 @@ def getPlayer(gameName,playerID):
 
 def joinRandomGameHelper(id,playerID,gameName, db, cur):
 	    #db = get_db() 
-	    #cur = db.cursor()    
-            updateTableStr = "UPDATE allGames SET player%d=%d WHERE gameID ='%s'" %(id,playerID,gameName)
+	    #cur = db.cursor()
+            updateTableStr = "UPDATE masterGame SET player%d=%d WHERE gameID ='%s'" %(id,playerID,gameName)
   	    print(updateTableStr)
             cur.execute(updateTableStr)
             db.commit()
@@ -170,23 +181,29 @@ def joinRandomGame(playerID):
         cur = db.cursor()   
 #	cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
 #	print(cur.fetchall())
-	cur.execute("SELECT player0,player1,player2,gameID FROM allGames ORDER BY gameID DESC LIMIT 1")
+	cur.execute("SELECT player0,player1,player2,gameID FROM masterGame ORDER BY gameID DESC LIMIT 1")
 	playerStatus = cur.fetchall()
+	print("PLAYER STATUS")
+	print(playerStatus)
 	gameName = playerStatus[0][3]
 	playerNum = -1
 	f = open('curPlayerNetworkCall', 'w')
+	print("0")
 	if playerStatus[0][0] is None:
         	joinRandomGameHelper(0,playerID,gameName, db, cur)
+		print("1")
 		playerNum = 0
 	elif playerStatus[0][1] is None:
 		joinRandomGameHelper(1,playerID,gameName, db, cur)
+		print("2")
 		playerNum = 1
 	elif playerStatus[0][2] is None:
 		joinRandomGameHelper(2,playerID,gameName, db, cur)
+		print("3")
 		playerNum = 2
 		db = sqlite3.connect('pusoyDB')
        		cur = db.cursor()
-		queryStr = "UPDATE gameStatus SET gameFull='1' where gameID='%s'"%gameName 
+		queryStr = "UPDATE masterGame SET gameFull='1' where gameID='%s'"%gameName 
 		print(queryStr)
 		cur.execute(queryStr)
 		#db.close()
@@ -205,10 +222,11 @@ def joinRandomGame(playerID):
 def gameStatus(gameID):
 	db = get_db()
 	cur = db.cursor()
-	searchQuery = "SELECT curPlayer,gameFull,cardCount FROM gameStatus WHERE gameID = '%s'"%gameID
+	searchQuery = "SELECT curPlayer,gameFull,cardCount FROM masterGame WHERE gameID = '%s'"%gameID
 	cur.execute(searchQuery)
 	curPlayerStatus = cur.fetchall()
 	cardCount = curPlayerStatus[0][2]
+	print(cardCount)
 	returnHand = []
 	if cardCount != 0: 
 		queryStr = "SELECT "
@@ -216,7 +234,7 @@ def gameStatus(gameID):
 			if i != 0 :
 				queryStr = queryStr + ", "
 			queryStr = queryStr + "card%s"%i
-		queryStr = queryStr + " FROM gameStatus WHERE gameID = '%s'"%gameID
+		queryStr = queryStr + " FROM masterGame WHERE gameID = '%s'"%gameID
 		print(queryStr)
 		cur.execute(queryStr)
 		hand = cur.fetchall()	
@@ -276,9 +294,11 @@ def newPlayer():
 
 @app.route('/playHand', methods=['POST'])
 def create_task():
+	#if 0:
 	if not 'cards' in request.json or not 'playerID' in request.json or not 'gameID' in request.json:
 		return "Bad Params"
 	else:
+		print("IN RIGHT SECTION")
 		db = get_db()
         	cur = db.cursor()
 		cards = request.json['cards']
@@ -320,7 +340,7 @@ def create_task():
 			queryStr = queryStr + " WHERE id = '%s'"%playerID
                 	print(queryStr)
                 	cur.execute(queryStr)
-		
+			print("ALEX YOU IDIOT")
 		#updateTableStr = "UPDATE %s SET hand = '%s',cardCount=%d where id = %s"%(gameID,str(hand),len(hand),playerID)
 		else:
 			return "YOU HAVE WON"
@@ -328,7 +348,7 @@ def create_task():
 		updatedCards = getPlayer(gameID,playerID)
 	  	playerNum = findPlayerNum(gameID,playerID,db, cur)	
 		playerNum = (playerNum+1)%3
-		queryStr = "UPDATE gameStatus SET %s,curPlayer='%d' WHERE gameID = '%s'"%(gameStatusQuery,playerNum,gameID)
+		queryStr = "UPDATE masterGame SET %s,curPlayer='%d' WHERE gameID = '%s'"%(gameStatusQuery,playerNum,gameID)
 		print("ALEX LOOK UPDATE QUERY")
 		print(queryStr)
 		cur.execute(queryStr)
@@ -344,14 +364,14 @@ def playPassHand():
         	playerID = request.json['playerID']
 		playerNum = findPlayerNum(gameID,playerID)
                 playerNum = (playerNum+1)%3
-		queryStr = "UPDATE gameStatus SET lastPlayedHand=100,100,curPlayer='%s' WHERE gameID = '%s'"%(playerNum,gameID)
+		queryStr = "UPDATE masterGame SET lastPlayedHand=100,100,curPlayer='%s' WHERE gameID = '%s'"%(playerNum,gameID)
         	cur.execute(queryStr)
 		db.commit() 
 		return "Hand Passed"		
 	
 
 if __name__ == '__main__':
-    app.run(debug='true', host = '192.168.0.104')
+    app.run(debug='true',host=ipAddress)
 
 
 @app.route('/')

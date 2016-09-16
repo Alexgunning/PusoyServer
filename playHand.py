@@ -7,18 +7,22 @@ print(str(sys.argv))
 playerNum = sys.argv[1] 
 numCardsToPlay = sys.argv[2]
 
+f=open('ipAddress','r')
+ipAddress = f.readline()
+ipAddress = ipAddress.rstrip()
+
 DATABASE = '/var/www/FlaskApp/FlaskApp/pusoyDB'
 
 db = sqlite3.connect(DATABASE)
 cur = db.cursor()
-queryStr = "SELECT player%s, gameID FROM allGames ORDER BY gameID DESC LIMIT 1"%playerNum
+queryStr = "SELECT player%s, gameID FROM masterGame where gameFull = 1 ORDER BY gameID DESC LIMIT 1"%playerNum
 cur.execute(queryStr)
 queryResult = cur.fetchall()
 playerID = queryResult[0][0] 
 gameID = queryResult[0][1]
 
 def getPlayer():
-	queryString = "SELECT cardCount FROM %s WHERE id = %s AND gameFull "%(gameID,playerID)
+	queryString = "SELECT cardCount FROM %s WHERE id = %s"%(gameID,playerID)
         print(queryString)
 	cur.execute(queryString)
         cardCount = cur.fetchall()
@@ -46,6 +50,6 @@ fullHand = getPlayer()
 playHand = [fullHand[0]]
 playHandStr = str(playHand)
 
-networkCall = "curl -i -H \"Content-Type: application/json\" -X POST -d '{\"gameID\":\"%s\",\"playerID\":\"%d\",\"cards\":\"%s\"}' http://192.168.0.104:5000/playHand"%(gameID, playerID, playHandStr)
+networkCall = "curl -i -H \"Content-Type: application/json\" -X POST -d '{\"gameID\":\"%s\",\"playerID\":\"%d\",\"cards\":\"%s\"}' http://%s:5000/playHand"%(gameID, playerID, playHandStr, ipAddress)
 print(networkCall)
 os.system(networkCall)
