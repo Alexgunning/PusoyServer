@@ -294,7 +294,9 @@ def newPlayer():
 
 @app.route('/playHand', methods=['POST'])
 def create_task():
-	#if 0:
+	print("THIS IS THE PLAY HAND REQUEST")
+	print(request)
+	print(request.json)
 	if not 'cards' in request.json or not 'playerID' in request.json or not 'gameID' in request.json:
 		return "Bad Params"
 	else:
