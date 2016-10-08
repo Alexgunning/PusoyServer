@@ -67,21 +67,32 @@ def rank52alt():
                 for j in range(4):
                         cards[13*j+i] = k
                         k = k+1
-        return cards
+	return cards
 
-def findStartingPlayer(playerArray):
+def findStartingPlayer(playerArray, rank52Alt):
 	playerIt = 0
 	cardIt = 0
 	lowCardIt = 0
+	lowCardRank52 = 0
+	print(playerArray)
+	return (0,playerArray[0][0])	
 	while 1:
 		while playerIt < 3:
 			while cardIt < 13:
-				if playerArray[playerIt][cardIt] == lowCardIt:
+				print(playerIt)
+				print(cardIt)
+				print(lowCardRank52)
+				if playerArray[playerIt][cardIt] == lowCardRank52:
+					print("RETURNING")
+					print(playerIt)
+					print(lowCardIt)
 					return (playerIt,lowCardIt) 
 				cardIt = cardIt + 1
 			playerIt = playerIt + 1
 			cardIt = 0
-		lowCardIt = lowCardIt + 1
+		print("LOW CARD IT")
+		lowCardRank52 = rank52Alt[lowCardIt + 1]
+		print(lowCardRank52)
 		playerIt = 0
 
 def updateTableWithStartingHand(playerID, timeStr, playerArray, db, cur):
@@ -101,7 +112,7 @@ def CreateGame(db, cur):
 	timeStr = strftime("%y%j%H%M%S", gmtime())
 	players = initHands(timeStr)
 	rank52altSorted = rank52alt()
-	startingData = findStartingPlayer(players)	
+	startingData = findStartingPlayer(players, rank52altSorted)	
 	
 	createTableStr = "CREATE TABLE game%s (id INT, cardCount INT, Card0 INT, Card1 INT, Card2 INT, Card3 INT, Card4 INT, Card5 INT, Card6 INT, Card7 INT, Card8 INT, Card9 INT, Card10 INT, Card11 INT, Card12 INT )"%timeStr
 	cur.execute(createTableStr)
@@ -114,7 +125,7 @@ def CreateGame(db, cur):
 	updateTableWithStartingHand(p0Const, timeStr, players[0], db, cur)
 	updateTableWithStartingHand(p1Const, timeStr, players[1], db, cur)
 	updateTableWithStartingHand(p2Const, timeStr, players[2], db, cur)
-	masterGameStr = "INSERT INTO masterGame (gameID, curPlayer, gameFull, gameFinished, cardCount) VALUES ('game%s','%d','0','0','0')"%(timeStr, startingData[1]) 
+	masterGameStr = "INSERT INTO masterGame (gameID, curPlayer, gameFull, gameFinished, cardCount) VALUES ('game%s','%d','0','0','0')"%(timeStr, startingData[0]) 
 	print(masterGameStr)
 	cur.execute(masterGameStr)
 	db.commit()
@@ -222,11 +233,10 @@ def joinRandomGame(playerID):
 def gameStatus(gameID):
 	db = get_db()
 	cur = db.cursor()
-	searchQuery = "SELECT curPlayer,gameFull,cardCount FROM masterGame WHERE gameID = '%s'"%gameID
+	searchQuery = "SELECT curPlayer,gameFull,cardCount,gameFinished FROM masterGame WHERE gameID = '%s'"%gameID
 	cur.execute(searchQuery)
 	curPlayerStatus = cur.fetchall()
 	cardCount = curPlayerStatus[0][2]
-	print(cardCount)
 	returnHand = []
 	if cardCount != 0: 
 		queryStr = "SELECT "
@@ -241,7 +251,7 @@ def gameStatus(gameID):
 		for i in range(cardCount):
 			returnHand.append(hand[0][i])
 	
-	return jsonify(curPlayer=curPlayerStatus[0][0],lastPlayedHand=returnHand,gameFull=curPlayerStatus[0][1])
+	return jsonify(curPlayer=curPlayerStatus[0][0],lastPlayedHand=returnHand,gameFull=curPlayerStatus[0][1],gameWon=curPlayerStatus[0][3])
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -342,10 +352,11 @@ def create_task():
 			queryStr = queryStr + " WHERE id = '%s'"%playerID
                 	print(queryStr)
                 	cur.execute(queryStr)
-			print("ALEX YOU IDIOT")
 		#updateTableStr = "UPDATE %s SET hand = '%s',cardCount=%d where id = %s"%(gameID,str(hand),len(hand),playerID)
 		else:
-			return "YOU HAVE WON"
+			print("You Have Won")	
+			queryStr = "UPDATE masterGame SET gameFinished=1 where gameID=%s"%gameID
+			return jsonify(gameWon=1)
         	db.commit()
 		updatedCards = getPlayer(gameID,playerID)
 	  	playerNum = findPlayerNum(gameID,playerID,db, cur)	
@@ -362,18 +373,22 @@ def playPassHand():
 	if not 'playerID' in request.json or not 'gameID' in request.json:
         	return "Bad Params"
         else:
+		db = get_db()
+                cur = db.cursor()
 		gameID = request.json['gameID']
         	playerID = request.json['playerID']
-		playerNum = findPlayerNum(gameID,playerID)
+		playerNum = findPlayerNum(gameID,playerID, db, cur)
                 playerNum = (playerNum+1)%3
-		queryStr = "UPDATE masterGame SET lastPlayedHand=100,100,curPlayer='%s' WHERE gameID = '%s'"%(playerNum,gameID)
+		queryStr = "UPDATE masterGame SET cardCount=0,curPlayer='%s' WHERE gameID = '%s'"%(playerNum,gameID)
+		print("PASS QUERY")
+		print(queryStr)
         	cur.execute(queryStr)
 		db.commit() 
-		return "Hand Passed"		
-	
+		return jsonify(passSuccess=1)
 
 if __name__ == '__main__':
-    app.run(debug='true',host=ipAddress)
+        app.run(debug='true',host=ipAddress)
+	#app.run()
 
 
 @app.route('/')
