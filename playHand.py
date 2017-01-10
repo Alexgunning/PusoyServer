@@ -5,7 +5,7 @@ print(str(sys.argv))
 
 #1st Arg player num, 2nd Arg num cards to play
 playerNum = sys.argv[1] 
-numCardsToPlay = sys.argv[2]
+#numCardsToPlay = sys.argv[2]
 
 f=open('ipAddress','r')
 ipAddress = f.readline()
