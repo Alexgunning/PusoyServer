@@ -16,11 +16,6 @@ ipAddress = f.readline()
 ipAddress = ipAddress.rstrip()
 #print(ipAddress) 
 
-#timeStr = strftime("%H%M%S", gmtime()) 
-#db = MySQLdb.connect("localhost","root","KopitarTrout27","
-#db = sqlite3.connect('pusoyDB')
-#cur = db.cursor()
-
 DATABASE = '/var/www/FlaskApp/FlaskApp/pusoyDB'
 
 app = Flask(__name__)
@@ -96,10 +91,8 @@ def findStartingPlayer(playerArray, rank52Alt):
 		playerIt = 0
 
 def updateTableWithStartingHand(playerID, timeStr, playerArray, db, cur):
-	#TODO one sql statement for each would be faster
 	for i in range(13):
 		queryStr = "UPDATE game%s SET Card%d=%d WHERE id=%d"%(timeStr, i, playerArray[i], playerID)
-		#print(queryStr)
 		cur.execute(queryStr)
 		db.commit()
 
