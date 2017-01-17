@@ -20,6 +20,11 @@ DATABASE = '/var/www/FlaskApp/FlaskApp/pusoyDB'
 
 app = Flask(__name__)
 
+OUTGOING_FRIEND__REGUEST = 0
+INCOMING_FRIEND_REGUEST = 1
+FRIENDS = 2
+
+
 def get_db():
     #db = getattr(g, '_database', None)
     db = None
@@ -253,7 +258,7 @@ def getGameStatus(gameID,lastHandID):
         searchQuery = "SELECT handID FROM hand%s ORDER BY handID DESC LIMIT 1"%gameID
         #print(searchQuery)
 	cur.execute(searchQuery)
-	handIDs = cur.fetchall()	
+	handIDs = cur.fetchall()
 	curPlayer = -1
 	if lastHandID == 0:
 		fullQuery = "SELECT gameFull,curPlayer FROM masterGame WHERE gameID= '%s'"%gameName
@@ -263,12 +268,12 @@ def getGameStatus(gameID,lastHandID):
 		curPlayer = vals[0][1]
 		if vals[0][0] == 0:
 			return jsonify(gameFull=0)
-	
+
         #curPlayerStatus = cur.fetchall()
         #print(handIDs)
 	if not handIDs:
 		return jsonify(curPlayer=curPlayer)
-	maxHand = handIDs[0][0] 
+	maxHand = handIDs[0][0]
 	numHands = maxHand  - lastHandID
 	#print(numHands)
 	returnHands = []
@@ -278,29 +283,29 @@ def getGameStatus(gameID,lastHandID):
 	if numHands == 0:
 		return jsonify(noNewHands=1)
 	else:
-		for i in range(numHands):	
-		        handID = lastHandID+i+1
+		for i in range(numHands):
+                        handID = lastHandID+i+1
 			queryStr = "SELECT cardCount, playerID FROM hand%s where handID =%d"%(gameID, handID)
 			cur.execute(queryStr)
 			vals = cur.fetchall()
 			cardCount = vals[0][0]
-			playerID = vals[0][1] 
+			playerID = vals[0][1]
 			returnHand = []
-       		        if cardCount != 0:
-                		queryStr = "SELECT "
-                		for i in range(cardCount):
-                        		if i != 0 :
-                                		queryStr = queryStr + ", "
-                        		queryStr = queryStr + "card%s"%i
-                		queryStr = queryStr + " FROM hand%s  WHERE handID = '%s'"%(gameID, handID)
-                		#print(queryStr)
-                		cur.execute(queryStr)
-                		hand = cur.fetchall()
-                		for i in range(cardCount):
-                        		returnHand.append(hand[0][i])
+                        if cardCount != 0:
+                            queryStr = "SELECT "
+                            for i in range(cardCount):
+                                    if i != 0 :
+                                            queryStr = queryStr + ", "
+                                    queryStr = queryStr + "card%s"%i
+                            queryStr = queryStr + " FROM hand%s  WHERE handID = '%s'"%(gameID, handID)
+                            #print(queryStr)
+                            cur.execute(queryStr)
+                            hand = cur.fetchall()
+                            for i in range(cardCount):
+                                    returnHand.append(hand[0][i])
 			playerIDs.append(playerID)
 			cardCounts.append(cardCount)
-        		returnHands.append(returnHand)	
+                        returnHands.append(returnHand)
 			turnIDs.append(handID)
 		return jsonify(playerIDs=playerIDs,cardCounts=cardCounts,returnHands=returnHands,turnIDs=turnIDs)
 
@@ -309,20 +314,24 @@ def getGameStatus(gameID,lastHandID):
 def login():
     if not request.json or not 'email' in request.json or not 'password' in request.json:
        # abort(400)
-	return (jsonify(id=-3)) 
+	return (jsonify(id=-3))
+    db = get_db()
+    cur = db.cursor()
     email = request.json['email']
     password = request.json['password']
     password.encode('ascii','ignore')
     str(email)
     queryStr = "SELECT password FROM players WHERE email = '%s'"%email
     isValidEmail = cur.execute(queryStr)
-    if isValidEmail == 0:
-    	return (jsonify(id=-2))
     queryResult = cur.fetchall()
-    
+    #alex fix
+    if len(queryResult) ==  0:
+        return (jsonify(id=-2))
+    print("rowcount = %s"%cur.rowcount)
+    print(queryResult)
     passwordSQL = queryResult[0][0]
     if password != passwordSQL:
-    	return (jsonify(id=-1))
+        return (jsonify(id=-1))
     else:
 	queryStr = "SELECT id FROM players WHERE email = '%s'"%email
         cur.execute(queryStr)
@@ -332,7 +341,7 @@ def login():
         #print(id)
         return (jsonify(id=id))
 
-@app.route('/newPlayer', methods=['POST'])
+@app.route('/signUp', methods=['POST'])
 def newPlayer():
 	if not request.json or not 'email' in request.json or not 'password' in request.json:
        		return "Bad Params"
@@ -341,15 +350,21 @@ def newPlayer():
 	email = request.json['email']
 	password = request.json['password']	
 	queryStr = "SELECT * FROM players WHERE email = '%s'"%email
+        print(queryStr)
 	emailExists = cur.execute(queryStr)
-	if emailExists != 0:
-		return (jsonify(id=-1))
+        queryResult = cur.fetchall()
+        #alex fix
+        if len(queryResult) !=  0:
+            print("shouldnt be here")
+            return (jsonify(id=-1))
 	queryStr = "INSERT INTO players (email, password) VALUES ('%s','%s')"%(email,password)
 	cur.execute(queryStr)
 	queryStr = "SELECT id FROM players WHERE email = '%s'"%email
 	cur.execute(queryStr)
 	idArray = cur.fetchall()
 	id = idArray[0][0]
+        queryStr = 'CREATE TABLE player%d(playerID INT PRIMARY KEY NOT NULL, friendStatus INT NOT NULL)'%id
+        cur.execute(queryStr)
 	db.commit()
 	#print(id)
 	return (jsonify(id=id))
@@ -447,10 +462,76 @@ def playPassHand():
 		handQueryStr = "INSERT INTO hand%s (playerID, cardCount) VALUES (%d,0 )"%(gameNum, playerNum)
 		#print("PASS QUERY")
 		#print(queryStr)
-        	cur.execute(queryStr)
+                cur.execute(queryStr)
 		cur.execute(handQueryStr)
 		db.commit() 
 		return jsonify(passSuccess=1)
+#Friend Status Codes 
+#Orig Requesting 0
+#Asked by other 1
+#Friends 2
+@app.route('/addFriend', methods=['POST'])
+def addFriend():
+    if not request.json or not 'origFriendID' in request.json or not 'newFriendEmail' in request.json:
+       # abort(400)
+	return (jsonify(id=-3))
+    db = get_db()
+    cur = db.cursor()
+    origFriendID = request.json['origFriendID']
+    newFriendEmail = request.json['newFriendEmail']
+    queryStr = "SELECT ID FROM players WHERE email = '%s'"%newFriendEmail
+    print(queryStr)
+    cur.execute(queryStr)
+    emailFetch = cur.fetchall()
+    newFriendID = emailFetch[0][0]
+    queryStr = "INSERT INTO player%s (playerID, friendStatus) VALUES (%s, OUTGOING_FRIEND__REGUEST)"%(origFriendID, newFriendID)
+    cur.execute(queryStr)
+    queryStr = "INSERT INTO player%s (playerID, friendStatus) VALUES (%s, INCOMING_FRIEND_REGUEST)"%(newFriendID, origFriendID)
+    cur.execute(queryStr)
+    db.commit()
+    return jsonify(addFriend=1)
+
+@app.route('/acceptFriend', methods=['POST'])
+def accpetFriend():
+    if not request.json or not 'origFriendID' in request.json or not 'newFriendEmail' in request.json:
+       # abort(400)
+	return (jsonify(id=-3))
+    db = get_db()
+    cur = db.cursor()
+    origFriendID = request.json['origFriendID']
+    newFriendEmail = request.json['newFriendEmail']
+    queryStr = "SELECT ID FROM players WHERE email = '%s'"%newFriendEmail
+    print(queryStr)
+    cur.execute(queryStr)
+    emailFetch = cur.fetchall()
+    newFriendID = emailFetch[0][0]
+    queryStr = "UPDATE player%s SET friendStatus=FRIENDS WHERE playerID=%s"%(origFriendID, newFriendID)
+    cur.execute(queryStr)
+    queryStr = "UPDATE player%s SET friendStatus=FRIENDS WHERE playerID=%s"%(newFriendID, origFriendID)
+    cur.execute(queryStr)
+    db.commit()
+    return jsonify(acceptFriend=1)
+
+@app.route('/getFriends/<int:playerID>')
+def getFriends(playerID):
+    db = get_db()
+    cur = db.cursor()
+    queryStr = "SELECT * FROM player%d"%playerID
+    print(queryStr)
+    cur.execute(queryStr)
+    playerIDFetch = cur.fetchall()
+    incomingFriendRequest = []
+    outgoingFriendRequest = []
+    friends = []
+    for player in playerIDFetch:
+        if player[1] == INCOMING_FRIEND_REGUEST:
+            incomingFriendRequest.append(player[0])
+        if player[1] == OUTGOING_FRIEND__REGUEST:
+            outgoingFriendRequest.append(player[0])
+        if player[1] == FRIENDS:
+            friends.append(player[0])
+    return jsonify(incomingFR=incomingFriendRequest, outgoingFR=outgoingFriendRequest, friends=friends)
+
 
 if __name__ == '__main__':
         app.run(debug='true',host=ipAddress)

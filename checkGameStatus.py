@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import os
 import sys
 import sqlite3
@@ -5,6 +6,7 @@ import sqlite3
 f=open('ipAddress','r')
 ipAddress = f.readline()
 ipAddress = ipAddress.rstrip()
+
 
 DATABASE = '/var/www/FlaskApp/FlaskApp/pusoyDB'
 db = sqlite3.connect(DATABASE)
