@@ -9,21 +9,25 @@ import random
 import sqlite3
 import logging
 import sys
+from os import path
 from time import gmtime, strftime
+import re
 
-f=open('ipAddress','r')
-ipAddress = f.readline()
-ipAddress = ipAddress.rstrip()
+# f=open('ipAddress','r')
+# ipAddress = f.readline()
+# ipAddress = ipAddress.rstrip()
+ipAddress = "192.168.1.12"
 #print(ipAddress) 
 
-DATABASE = '/var/www/FlaskApp/FlaskApp/pusoyDB'
+# DATABASE = '/var/www/FlaskApp/FlaskApp/pusoyDB'
+path = sys.argv[0]
+DATABASE = re.sub('__init__\.py','pusoyDB', path)
 
 app = Flask(__name__)
 
 OUTGOING_FRIEND__REGUEST = 0
 INCOMING_FRIEND_REGUEST = 1
 FRIENDS = 2
-
 
 def get_db():
     #db = getattr(g, '_database', None)
@@ -40,11 +44,11 @@ def close_connection(exception):
 
 
 def findPlayerNum(gameID,playerID, db, cur):
-	queryStr = "SELECT player0,player1,player2 FROM masterGame WHERE gameID = '%s'"%gameID
-	cur.execute(queryStr)
-	playerDB = cur.fetchall()
-	#print("PLAYER DB CALL RESULTS")
-	#print(playerDB)
+        queryStr = "SELECT player0,player1,player2 FROM masterGame WHERE gameID = '%s'"%gameID
+        cur.execute(queryStr)
+        playerDB = cur.fetchall()
+        # print("PLAYER DB CALL RESULTS")
+        # print(playerDB)
 	for i in range(3):
 		if int(playerDB[0][i]) == int(playerID):
 			return i
@@ -342,7 +346,7 @@ def login():
         return (jsonify(id=id))
 
 @app.route('/signUp', methods=['POST'])
-def newPlayer():
+def signUp():
 	if not request.json or not 'email' in request.json or not 'password' in request.json:
        		return "Bad Params"
 	db = get_db()
@@ -351,6 +355,29 @@ def newPlayer():
 	password = request.json['password']	
 	queryStr = "SELECT * FROM players WHERE email = '%s'"%email
         print(queryStr)
+	emailExists = cur.execute(queryStr)
+        queryResult = cur.fetchall()
+        #alex fix
+        if len(queryResult) !=  0:
+            print("shouldnt be here")
+            return (jsonify(id=-1))
+	queryStr = "INSERT INTO players (email, password) VALUES ('%s','%s')"%(email,password)
+	cur.execute(queryStr)
+	queryStr = "SELECT id FROM players WHERE email = '%s'"%email
+	cur.execute(queryStr)
+	idArray = cur.fetchall()
+	id = idArray[0][0]
+        queryStr = 'CREATE TABLE player%d(playerID INT PRIMARY KEY NOT NULL, friendStatus INT NOT NULL)'%id
+        cur.execute(queryStr)
+	db.commit()
+	#print(id)
+	return (jsonify(id=id))
+
+@app.route('/newPlayer/<string:email>/<string:password>')
+def newPlayer(email,password):
+	db = get_db()
+	cur = db.cursor() 
+	queryStr = "SELECT * FROM players WHERE email = '%s'"%email
 	emailExists = cur.execute(queryStr)
         queryResult = cur.fetchall()
         #alex fix
@@ -532,12 +559,13 @@ def getFriends(playerID):
             friends.append(player[0])
     return jsonify(incomingFR=incomingFriendRequest, outgoingFR=outgoingFriendRequest, friends=friends)
 
-
-if __name__ == '__main__':
-        app.run(debug='true',host=ipAddress)
-	#app.run()
-
-
 @app.route('/')
 def index():
     return "Hello, World!"
+
+if __name__ == '__main__':
+        # app.run(debug='true',host=ipAddress)
+        app.run(debug='true')
+	#app.run()
+
+
